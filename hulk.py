@@ -6,6 +6,7 @@ import time
 import argparse
 import platform
 import logging
+import os
 
 logging.basicConfig(filename="hulk.log", level=logging.INFO, format="%(asctime)s - %(message)s")
 
